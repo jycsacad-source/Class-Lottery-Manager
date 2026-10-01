@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#edf1f5">
+<title>Class Lottery Panel</title>
+<style>
+:root{
+  --blue:#707780;--blue2:#555b63;--blueSoft:#eef0f2;--ink:#172238;--muted:#6f7a8d;
+  --line:#d5d9de;--bg:#eceeef;--panel:#f6f7f8;--danger:#b64646;--white:#fff;--radius:18px;
+  --random:#992f63;--randomDeep:#702044;--delete:#9b6b00;--deleteDeep:#715000;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font:15px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+body{padding-bottom:max(18px,env(safe-area-inset-bottom));overscroll-behavior-y:contain}
+button,input,textarea,select{font:inherit}button{cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+input,textarea,select{font-size:16px}
+.app{width:min(100%,680px);margin:0 auto;padding:10px}
+.header{padding:5px 2px 9px}.header h1{margin:0;font-size:23px;letter-spacing:-.45px}.header p{margin:3px 0 0;color:var(--muted);font-size:11px}
+.card{background:var(--panel);border:1px solid #d8dadd;border-radius:var(--radius);box-shadow:0 4px 14px rgba(35,52,91,.04)}
+.btn{border:0;border-radius:12px;min-height:48px;padding:10px 13px;font-weight:850;background:#e8eaed;color:#44506a;touch-action:manipulation}
+.btn.primary{background:var(--blue);color:#fff}.btn.primary:active{background:var(--blue2)}
+.btn.danger{background:#fff0f0;color:var(--danger)}.btn.ghost{background:#fff;border:1px solid #d3d6da;color:#5d6673}.btn:disabled{opacity:.42;cursor:not-allowed}
+
+.import-top{padding:11px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:center;margin-bottom:10px}
+.import-copy{min-width:0}.import-copy strong{display:block;font-size:13px}.import-copy span{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+#importExcel{display:none}.import-label{white-space:nowrap;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;min-height:48px}
+
+/* lottery panel: colour changes with mode */
+.mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px}
+.mode-btn{min-height:48px;border-radius:13px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);color:#fff;font-weight:900;font-size:13px;padding:8px 9px;touch-action:manipulation}
+.mode-btn.active{background:#fff;color:#1e2a42;border-color:#fff;box-shadow:0 2px 9px rgba(0,0,0,.12)}
+.lottery-frame{border:0;border-radius:20px;padding:12px;color:#fff;margin-bottom:12px;box-shadow:0 8px 22px rgba(13,47,110,.16);transition:background .18s ease}
+.lottery-frame.mode-random{background:var(--random)}.lottery-frame.mode-delete{background:var(--delete)}
+.frame-top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:9px;padding:0 2px}
+.frame-class-wrap{min-width:0;display:flex;align-items:baseline;gap:8px;flex:1}.reset-pool-btn{min-height:36px;border:1px solid rgba(255,255,255,.34);border-radius:10px;background:rgba(255,255,255,.15);color:#fff;font-size:10px;font-weight:900;padding:6px 10px;white-space:nowrap;touch-action:manipulation}.reset-pool-btn:active{background:rgba(255,255,255,.26)}
+.current-class{font-weight:900;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;color:#fff}
+.student-count{border:0;background:transparent;padding:7px 2px;margin:0;font-size:11px;color:rgba(255,255,255,.82);white-space:nowrap;font-weight:800;min-height:34px;border-radius:8px;touch-action:manipulation}.student-count:not(:disabled){text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}.student-count:not(:disabled):active{background:rgba(255,255,255,.12)}.student-count:disabled{opacity:1}
+.available-box{display:none;margin:-2px 0 9px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.11);border-radius:11px;padding:8px}.available-box.open{display:block}.available-title{font-size:10px;font-weight:900;color:rgba(255,255,255,.78);text-transform:uppercase;letter-spacing:.35px;margin-bottom:5px}.available-list{max-height:185px;overflow-y:auto;-webkit-overflow-scrolling:touch;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.available-name{min-width:0;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:7px 8px;color:#fff;font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.available-empty{grid-column:1/-1;color:rgba(255,255,255,.72);font-size:11px;padding:5px}
+.lottery-screen{height:210px;border-radius:15px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.22);padding:12px;transition:background .18s ease,transform .18s ease,box-shadow .18s ease}
+.mode-random .lottery-screen{background:var(--randomDeep)}.mode-delete .lottery-screen{background:var(--deleteDeep)}
+.lottery-screen:before{content:"";position:absolute;inset:8px;border:1px solid rgba(255,255,255,.12);border-radius:11px;pointer-events:none}
+.ticket{position:relative;z-index:1;width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:30px;font-weight:900;line-height:1.12;color:#fff;overflow:hidden;padding:5px;word-break:break-word}
+.lottery-screen.running{box-shadow:0 0 0 3px rgba(255,255,255,.08),0 10px 24px rgba(0,0,0,.16)}
+.lottery-screen.running:after{content:"";position:absolute;inset:-45%;background:linear-gradient(110deg,transparent 38%,rgba(255,255,255,.16) 50%,transparent 62%);animation:sweep .28s linear infinite;pointer-events:none}
+.lottery-screen.running .ticket{animation:shuffle .08s linear infinite}
+.lottery-screen.reveal{animation:revealPulse .24s ease-out}.lottery-screen.reveal .result-name{animation:resultPop .22s cubic-bezier(.2,.9,.3,1.25) both}
+@keyframes shuffle{0%,100%{transform:translateY(-4px);opacity:.72}50%{transform:translateY(4px);opacity:1}}
+@keyframes sweep{from{transform:translateX(-28%) rotate(2deg)}to{transform:translateX(28%) rotate(2deg)}}
+@keyframes revealPulse{0%{transform:scale(.985);box-shadow:0 0 0 0 rgba(255,255,255,.34)}55%{transform:scale(1.008);box-shadow:0 0 0 5px rgba(255,255,255,.12)}100%{transform:scale(1);box-shadow:none}}
+@keyframes resultPop{from{transform:scale(.84);opacity:.25}to{transform:scale(1);opacity:1}}
+.result-grid{width:100%;max-height:100%;display:grid;grid-template-columns:1fr;align-content:center;justify-items:stretch;gap:5px;font-size:var(--result-font,28px)}
+.result-grid.two-col{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 8px}.result-grid.three-col{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 6px}
+.result-name{min-width:0;padding:5px 7px;border-radius:9px;background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.13);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.draw-controls{display:grid;grid-template-columns:50px 74px 50px minmax(92px,1fr);gap:7px;align-items:center;margin-top:10px}
+.step-btn{height:52px;border:1px solid rgba(255,255,255,.22);border-radius:13px;background:rgba(255,255,255,.13);color:#fff;font-size:25px;font-weight:800;touch-action:manipulation}
+.step-btn:active{background:rgba(255,255,255,.24);transform:scale(.98)}
+#drawCountInput{width:100%;height:52px;border:0;border-radius:13px;background:#fff;color:#25324a;text-align:center;font-weight:950;font-size:21px;padding:0 4px;-moz-appearance:textfield}
+#drawCountInput::-webkit-outer-spin-button,#drawCountInput::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+#drawBtn{height:52px;border:0;border-radius:13px;background:#fff;color:#25324a;font-weight:950;font-size:17px;letter-spacing:.2px;touch-action:manipulation}
+#drawBtn:active:not(:disabled){transform:scale(.99);opacity:.9}#drawBtn:disabled{opacity:.42}
+.draw-count-label{font-size:10px;color:rgba(255,255,255,.78);margin:7px 1px 0;text-align:center}
+.history-toggle-row{display:flex;justify-content:flex-end;margin-top:7px}
+#historyBtn{min-height:32px;border:1px solid rgba(255,255,255,.24);border-radius:10px;background:rgba(255,255,255,.12);color:#fff;font-size:10px;font-weight:850;padding:6px 10px}
+.history-box{display:none;margin-top:8px;border-top:1px solid rgba(255,255,255,.20);padding-top:8px}.history-box.open{display:block}
+.history-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.history-tools span{font-size:10px;font-weight:850;color:rgba(255,255,255,.82)}
+.history-limit{display:grid;grid-template-columns:30px 40px 30px;gap:4px;align-items:center}.history-limit button,.history-limit input{height:30px;border:1px solid rgba(255,255,255,.22);border-radius:8px;text-align:center;font-size:12px;font-weight:900}
+.history-limit button{background:rgba(255,255,255,.12);color:#fff}.history-limit input{background:#fff;color:#25324a;width:40px;padding:0;-moz-appearance:textfield}.history-limit input::-webkit-inner-spin-button,.history-limit input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.history-list{height:225px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;border-radius:10px;background:rgba(0,0,0,.08);padding:4px}
+.history-row{min-height:38px;display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:7px;align-items:center;padding:4px 6px;border-bottom:1px solid rgba(255,255,255,.10);font-size:11px;background:var(--draw-shade,rgba(255,255,255,.08));transition:background .15s}.history-row.draw-start{margin-top:4px;border-radius:8px 8px 0 0}.history-row.draw-end{border-radius:0 0 8px 8px;margin-bottom:4px}.history-row.draw-start.draw-end{border-radius:8px}
+.history-return{min-height:32px;border:1px solid rgba(255,255,255,.32);border-radius:8px;background:rgba(255,255,255,.14);color:#fff;font-size:9px;font-weight:900;padding:5px 8px;touch-action:manipulation;white-space:nowrap}.history-return:disabled{opacity:.5}.history-return:active{background:rgba(255,255,255,.25)}
+.history-row:last-child{border-bottom:0}.history-mode{font-size:9px;font-weight:900;opacity:.82;text-transform:uppercase}.history-names{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:800}.history-empty{font-size:11px;color:rgba(255,255,255,.72);padding:10px}
+
+.class-card{padding:12px;margin-bottom:10px;background:#f3f4f5}.section-title{font-size:11px;font-weight:900;color:#738096;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.class-line{display:grid;grid-template-columns:minmax(0,1fr) 48px 48px;gap:7px}#classSelect{width:100%;min-width:0;height:48px;border:1px solid #cfd2d6;border-radius:12px;background:#fff;padding:0 11px;font-weight:800;color:var(--ink)}
+.icon-btn{width:48px;height:48px;padding:0;font-size:22px;border-radius:12px}#moreBtn{width:100%;margin-top:9px;color:#59636f;border-color:#cfd2d5;background:#fff}
+.details{display:none;margin-top:10px;border-top:1px solid #d8dadd;padding-top:10px}.details.open{display:block}
+.weight-reset-grid{display:grid;grid-template-columns:minmax(0,1fr) 82px 82px 42px;gap:5px;align-items:end;margin-bottom:5px}
+.weight-reset-grid .label{font-size:10px;color:#818a9b;font-weight:900}.mini-reset{height:32px;border:1px solid #cfd2d5;border-radius:9px;background:#fff;color:#59636f;font-size:9px;font-weight:900;padding:2px 4px;touch-action:manipulation}
+.student-head{display:grid;grid-template-columns:minmax(0,1fr) 82px 82px 42px;gap:5px;color:#818a9b;font-size:9px;font-weight:900;padding:0 2px 4px;text-align:center}.student-head span:first-child{text-align:left}
+.student-list{max-height:310px;overflow:auto;-webkit-overflow-scrolling:touch}.student-row{display:grid;grid-template-columns:minmax(0,1fr) 82px 82px 42px;gap:5px;margin:7px 0;align-items:center}
+.student-row input{min-width:0;width:100%;height:46px;border:1px solid #d2d5d9;border-radius:10px;padding:0 8px;color:var(--ink);background:#fff}.student-row input[type=number]{text-align:center;font-weight:850;padding:0 3px}
+.remove-student{height:46px;border:0;border-radius:10px;background:#eceef0;color:#727c8e;font-size:20px;touch-action:manipulation}.remove-student:active{background:#e1e3e6}
+.empty{font-size:12px;color:var(--muted);padding:8px 2px}.import-box{margin-top:11px;padding-top:10px;border-top:1px solid #d8dadd}#importNames{width:100%;min-height:102px;resize:vertical;border:1px solid #cfd2d6;border-radius:11px;padding:10px;color:var(--ink);background:#fff}
+.import-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.hint{margin:7px 1px 0;font-size:10px;color:var(--muted)}
+
+.save-card{padding:10px;background:#f5f7fa}.name-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:center;margin-bottom:8px}.name-row label{font-size:11px;font-weight:900;color:#738096}.name-row input{height:46px;border:1px solid #cfd2d6;border-radius:11px;background:#fff;padding:0 10px;min-width:0}
+.save-export{width:100%;min-height:52px;font-size:14px;line-height:1.2;padding:9px 12px}.save-note{text-align:center;color:var(--muted);font-size:10px;margin-top:6px}
+.toast{position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translate(-50%,18px);background:#172238;color:#fff;border-radius:10px;padding:9px 13px;font-size:12px;font-weight:800;opacity:0;pointer-events:none;transition:.18s;z-index:100;max-width:calc(100vw - 24px);text-align:center}.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media(max-width:470px){
+ .app{padding:7px}.header{padding:4px 2px 7px}.header h1{font-size:20px}.header p{display:none}.import-top{padding:8px;margin-bottom:8px}.import-copy span{max-width:135px}.btn{min-height:48px;padding:8px 10px;font-size:12px}
+ .lottery-frame{padding:9px;border-radius:17px;margin-bottom:8px}.mode-btn{font-size:12px;padding:6px}.lottery-screen{height:210px;padding:10px}.ticket{font-size:27px}.draw-controls{grid-template-columns:48px 68px 48px minmax(86px,1fr);gap:5px}.step-btn,#drawCountInput,#drawBtn{height:50px}.step-btn{font-size:24px}#drawCountInput{font-size:20px}#drawBtn{font-size:15px}.history-list{height:225px}.available-list{grid-template-columns:1fr;max-height:165px}
+ .class-card{padding:9px;margin-bottom:8px}.class-line{grid-template-columns:minmax(0,1fr) 46px 46px;gap:5px}.icon-btn,#classSelect{height:46px}.icon-btn{width:46px}
+ .weight-reset-grid,.student-head,.student-row{grid-template-columns:minmax(0,1fr) 66px 66px 40px;gap:4px}.mini-reset{font-size:8px}.student-row input,.remove-student{height:46px}.student-list{max-height:260px}
+ .save-card{padding:8px}.save-export{min-height:50px}.name-row{grid-template-columns:1fr}.name-row label{margin-bottom:-4px}
+}
+@media(max-width:360px){
+ .app{padding:5px}.import-copy strong{font-size:12px}.import-copy span{max-width:100px}.lottery-screen{height:210px}.draw-controls{grid-template-columns:46px 62px 46px minmax(78px,1fr);gap:4px}.step-btn,#drawCountInput,#drawBtn{height:48px}.ticket{font-size:25px}.current-class{font-size:13px}
+ .weight-reset-grid,.student-head,.student-row{grid-template-columns:minmax(0,1fr) 60px 60px 38px;gap:3px}.student-row input{padding:0 5px}.mini-reset{padding:1px 2px;font-size:7.5px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header"><h1>Class Lottery Panel</h1><p>Two weighted draw modes · optimised for iPad touch</p></header>
+
+  <section class="card import-top">
+    <div class="import-copy"><strong>Import My Lottery Panel</strong><span id="fileStatus">No panel imported</span></div>
+    <label for="importExcel" class="btn import-label">⬆ Import My Lottery Panel</label>
+    <input id="importExcel" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv">
+  </section>
+
+  <section id="lotteryFrame" class="lottery-frame mode-random">
+    <div class="mode-tabs" aria-label="Lottery mode">
+      <button id="randomModeBtn" class="mode-btn active" type="button">Random Draw</button>
+      <button id="deleteModeBtn" class="mode-btn" type="button">Draw &amp; Delete</button>
+    </div>
+    <div class="frame-top"><div class="frame-class-wrap"><div id="currentClassLabel" class="current-class">No class selected</div><button id="studentCount" class="student-count" type="button" disabled aria-expanded="false">0 students</button></div><button id="resetDeletePool" class="reset-pool-btn" type="button" hidden>Reset Draw &amp; Delete</button></div>
+    <div id="availableBox" class="available-box"><div class="available-title">Available students</div><div id="availableList" class="available-list"></div></div>
+    <div id="lotteryScreen" class="lottery-screen" aria-live="polite"><div id="ticket" class="ticket">Select a class</div></div>
+    <div class="draw-controls" aria-label="Number of students to draw">
+      <button id="minusCount" class="step-btn" type="button" aria-label="Draw one fewer student">−</button>
+      <input id="drawCountInput" type="number" min="1" inputmode="numeric" value="1" aria-label="Number of students to draw">
+      <button id="plusCount" class="step-btn" type="button" aria-label="Draw one more student">＋</button>
+      <button id="drawBtn" type="button" disabled>DRAW</button>
+    </div>
+    <div class="draw-count-label">Tap − / +, or tap the number to type directly.</div>
+    <div class="history-toggle-row"><button id="historyBtn" type="button">History ▾</button></div>
+    <div id="historyBox" class="history-box">
+      <div class="history-tools"><span>Recent draws</span><div class="history-limit"><button id="historyMinus" type="button">−</button><input id="historyLimitInput" type="number" min="1" max="40" inputmode="numeric" value="10" aria-label="Number of recent draws to show"><button id="historyPlus" type="button">＋</button></div></div>
+      <div id="historyList" class="history-list"></div>
+    </div>
+  </section>
+
+  <section class="card class-card">
+    <div class="section-title">Select class</div>
+    <div class="class-line">
+      <select id="classSelect" aria-label="Select class"><option value="">Select a class</option></select>
+      <button id="addClass" class="btn primary icon-btn" type="button" title="Add class" aria-label="Add class">＋</button>
+      <button id="deleteClass" class="btn danger icon-btn" type="button" title="Delete class" aria-label="Delete class" disabled>−</button>
+    </div>
+    <button id="moreBtn" class="btn ghost" type="button" disabled>More options</button>
+
+    <div id="details" class="details">
+      <div class="section-title">Students &amp; mode weighting</div>
+      <div class="weight-reset-grid"><span class="label">Reset a weighting column</span><button id="resetRandom" class="mini-reset" type="button">Reset Random</button><button id="resetDelete" class="mini-reset" type="button">Reset Delete</button><span></span></div>
+      <div class="student-head"><span>Name</span><span>Random</span><span>Delete</span><span></span></div>
+      <div id="studentList" class="student-list"></div>
+      <div class="import-box">
+        <div class="section-title">Import a list of students</div>
+        <textarea id="importNames" placeholder="One student per line&#10;1 Chan Tai Man&#10;2 Lee Siu Ming&#10;3 Wong Ka Yan"></textarea>
+        <div class="import-actions"><button id="addNames" class="btn primary" type="button">Add students</button><button id="replaceNames" class="btn ghost" type="button">Replace list</button></div>
+        <p class="hint">New students start at weight 1 in both modes. Names beginning with a number are sorted by that number; names without a leading number keep the order entered.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card save-card">
+    <div class="name-row"><label for="ownerName">Your name</label><input id="ownerName" type="text" autocomplete="name" placeholder="Jose Yu"></div>
+    <button id="saveExport" class="btn primary save-export" type="button">Export Excel as &quot;My Lottery Panel DDMMYY&quot;</button>
+    <div class="save-note">Nothing is loaded automatically. Import your Lottery Panel to begin, then export the current session to Excel.</div>
+  </section>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+(()=>{
+  const $=s=>document.querySelector(s);
+  let classes=[];
+  let active=-1;
+  let drawCount=1;
+  let mode='random';
+  let running=false;
+  let latest=[];
+  let historyLimit=10;
+  let ownerName='';
+  let toastTimer;
+  let globalOrder=maxExistingOrder()+1;
+
+  function normaliseWeight(v){const n=Number(v);return Number.isFinite(n)&&n>0?Math.max(.1,n):1}
+  function normaliseClasses(data){
+    if(!Array.isArray(data))return [];
+    let seq=0;
+    return data.map((cl,i)=>({
+      name:String(cl?.name||`Class ${i+1}`).trim()||`Class ${i+1}`,
+      students:Array.isArray(cl?.students)?cl.students.map(s=>{
+        const legacy=normaliseWeight(s?.weight);
+        return {name:String(s?.name??'').trim(),randomWeight:normaliseWeight(s?.randomWeight??s?.weight??1),deleteWeight:normaliseWeight(s?.deleteWeight??s?.weight??1),_order:Number.isFinite(Number(s?._order))?Number(s._order):seq++};
+      }).filter(s=>s.name):[],
+      history:Array.isArray(cl?.history)?cl.history.slice(-40).map(h=>{
+        const mode=h?.mode==='delete'?'delete':'random';
+        const legacyNames=Array.isArray(h?.names)?h.names.map(String):[];
+        const people=Array.isArray(h?.people)?h.people.map((p,pi)=>({
+          name:String(p?.name??legacyNames[pi]??''),randomWeight:normaliseWeight(p?.randomWeight??1),deleteWeight:normaliseWeight(p?.deleteWeight??1),_order:Number.isFinite(Number(p?._order))?Number(p._order):seq++,returned:!!p?.returned
+        })).filter(p=>p.name):legacyNames.map(name=>({name,randomWeight:1,deleteWeight:1,_order:seq++,returned:false}));
+        return {mode,people,time:Number(h?.time)||Date.now()};
+      }):[],
+      deleteExcluded:Array.isArray(cl?.deleteExcluded)?cl.deleteExcluded.map(Number).filter(Number.isFinite):[]
+    }));
+  }
+  function maxExistingOrder(){let max=-1;classes.forEach(c=>c.students.forEach(s=>{if(Number.isFinite(Number(s._order)))max=Math.max(max,Number(s._order))}));return max}
+  function esc(v){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+  function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2000)}
+  function saveLocal(){/* Session-only by design: Excel import/export is the source of truth. */}
+  function current(){return active>=0&&classes[active]?classes[active]:null}
+  function deletePool(cl=current()){if(!cl)return [];const excluded=new Set((cl.deleteExcluded||[]).map(Number));return cl.students.filter(s=>!excluded.has(Number(s._order)))}
+  function modePool(cl=current()){if(!cl)return [];return mode==='delete'?deletePool(cl):cl.students}
+  function leadingNumber(name){const m=String(name).trim().match(/^(\d+(?:\.\d+)?)/);return m?Number(m[1]):null}
+  function sortStudents(students){return [...students].sort((a,b)=>{const na=leadingNumber(a.name),nb=leadingNumber(b.name);if(na!==null&&nb!==null)return na-nb||(a._order-b._order);if(na!==null)return -1;if(nb!==null)return 1;return a._order-b._order})}
+  function sortCurrent(){const cl=current();if(cl)cl.students=sortStudents(cl.students)}
+  function dateStamp(){const d=new Date();return `${String(d.getDate()).padStart(2,'0')}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getFullYear()).slice(-2)}`}
+  function exportBaseName(){const name=ownerName.trim();return `${name?`${name}'s`:'My'} Lottery Panel ${dateStamp()}`}
+  function updateExportLabel(){$('#saveExport').textContent=`Export Excel as "${exportBaseName()}"`}
+
+  function setTicketState(text){const ticket=$('#ticket');ticket.style.removeProperty('--result-font');ticket.innerHTML='';ticket.textContent=text}
+  function resultFontSize(count,longest){let size=count<=1?34:count===2?30:count===3?27:count<=5?23:count<=8?19:count<=12?16:14;if(longest>24)size-=5;else if(longest>18)size-=3;else if(longest>14)size-=1;return Math.max(12,size)}
+  function showResults(students){const ticket=$('#ticket');if(!students.length){setTicketState('Ready');return}const longest=Math.max(...students.map(s=>String(s.name).length));const cols=students.length>10?'three-col':students.length>5?'two-col':'';const size=resultFontSize(students.length,longest);ticket.innerHTML=`<div class="result-grid ${cols}" style="--result-font:${size}px">${students.map(s=>`<div class="result-name">${esc(s.name)}</div>`).join('')}</div>`}
+  function setDrawCount(value){const n=Math.max(1,Math.floor(Number(value)||1));drawCount=n;$('#drawCountInput').value=String(n)}
+  function setHistoryLimit(v){historyLimit=Math.min(40,Math.max(1,Math.floor(Number(v)||1)));$('#historyLimitInput').value=String(historyLimit);renderHistory()}
+  function trimHistoriesToForty(){classes.forEach(c=>{if(!Array.isArray(c.history))return;['random','delete'].forEach(m=>{const idx=c.history.map((h,i)=>h.mode===m?i:-1).filter(i=>i>=0);while(idx.length>40){c.history.splice(idx.shift(),1);for(let j=0;j<idx.length;j++)idx[j]--}})});saveLocal()}
+  function setMode(next){if(running)return;closeAvailable();mode=next==='delete'?'delete':'random';latest=[];$('#lotteryFrame').classList.toggle('mode-random',mode==='random');$('#lotteryFrame').classList.toggle('mode-delete',mode==='delete');$('#randomModeBtn').classList.toggle('active',mode==='random');$('#deleteModeBtn').classList.toggle('active',mode==='delete');render()}
+
+  function renderAvailableList(){
+    const cl=current(),box=$('#availableList');if(!box)return;
+    if(!cl||mode!=='delete'){box.innerHTML='';return}
+    const available=sortStudents(deletePool(cl));
+    box.innerHTML=available.length?available.map(s=>`<div class="available-name">${esc(s.name)}</div>`).join(''):'<div class="available-empty">No students available. Use Reset Draw & Delete to return everyone.</div>';
+  }
+  function closeAvailable(){const box=$('#availableBox');if(box)box.classList.remove('open');const btn=$('#studentCount');if(btn)btn.setAttribute('aria-expanded','false')}
+  function toggleAvailable(){if(mode!=='delete'||!current())return;const box=$('#availableBox'),open=box.classList.toggle('open');$('#studentCount').setAttribute('aria-expanded',open?'true':'false');if(open)renderAvailableList()}
+
+  function render(){
+    $('#classSelect').innerHTML='<option value="">Select a class</option>'+classes.map((c,i)=>`<option value="${i}" ${i===active?'selected':''}>${esc(c.name)}</option>`).join('');
+    const cl=current();
+    $('#currentClassLabel').textContent=cl?cl.name:'No class selected';
+    const pool=modePool(cl);
+    $('#studentCount').textContent=cl?(mode==='delete'?`${pool.length}/${cl.students.length} available ▾`:`${cl.students.length} student${cl.students.length===1?'':'s'}`):'0 students';
+    $('#studentCount').disabled=!cl||mode!=='delete';
+    $('#drawBtn').disabled=!cl||!pool.length||running;$('#deleteClass').disabled=!cl;$('#moreBtn').disabled=!cl;
+    $('#resetDeletePool').hidden=mode!=='delete'||!cl;$('#resetDeletePool').disabled=!cl||!(cl.deleteExcluded||[]).length;
+    if(!cl){setTicketState('Select a class');$('#details').classList.remove('open');$('#moreBtn').textContent='More options'}else if(!running){if(latest.length)showResults(latest);else setTicketState(pool.length?'Ready':(mode==='delete'?'Pool empty — reset to return everyone':'Add students first'))}
+    renderStudentList();renderHistory();renderAvailableList();$('#drawCountInput').value=String(drawCount);$('#historyLimitInput').value=String(historyLimit);updateExportLabel();
+  }
+  function renderStudentList(){
+    const cl=current();if(!cl){$('#studentList').innerHTML='';return}
+    $('#studentList').innerHTML=cl.students.length?cl.students.map((s,i)=>`<div class="student-row"><input data-index="${i}" data-field="name" value="${esc(s.name)}" aria-label="Student name"><input data-index="${i}" data-field="randomWeight" type="number" min="0.1" step="0.1" inputmode="decimal" value="${s.randomWeight}" aria-label="Random draw weight"><input data-index="${i}" data-field="deleteWeight" type="number" min="0.1" step="0.1" inputmode="decimal" value="${s.deleteWeight}" aria-label="Draw and delete weight"><button class="remove-student" data-remove="${i}" type="button" aria-label="Remove student">×</button></div>`).join(''):'<div class="empty">No students in this class.</div>';
+  }
+  function renderHistory(){
+    const cl=current();const box=$('#historyList');
+    if(!cl){box.innerHTML='<div class="history-empty">Select a class to see history.</div>';return}
+    const indexed=(cl.history||[]).map((h,index)=>({h,index})).filter(x=>x.h.mode===mode);
+    const events=indexed.slice(-historyLimit);
+    const rows=[];
+    const randomShades=['rgba(255,255,255,.30)','rgba(0,0,0,.22)','rgba(255,180,214,.34)','rgba(84,0,38,.34)','rgba(255,255,255,.16)','rgba(0,0,0,.34)','rgba(255,204,228,.40)','rgba(110,0,52,.24)','rgba(255,255,255,.38)','rgba(0,0,0,.14)'];
+    const deleteShades=['rgba(255,255,255,.30)','rgba(0,0,0,.22)','rgba(255,232,150,.36)','rgba(86,61,0,.34)','rgba(255,255,255,.16)','rgba(0,0,0,.34)','rgba(255,242,184,.42)','rgba(112,79,0,.25)','rgba(255,255,255,.38)','rgba(0,0,0,.14)'];
+    const shades=mode==='delete'?deleteShades:randomShades;
+    for(let ei=events.length-1, recentNo=1;ei>=0;ei--,recentNo++){
+      const {h,index:absoluteIndex}=events[ei],people=Array.isArray(h.people)?h.people:[];
+      const shade=shades[(recentNo-1)%shades.length];
+      for(let pi=0;pi<people.length;pi++){
+        const p=people[pi];
+        const action=mode==='delete'?`<button class="history-return" type="button" data-history-index="${absoluteIndex}" data-person-index="${pi}" ${p.returned?'disabled':''}>${p.returned?'Returned':'Return'}</button>`:'';
+        const cls=`history-row ${pi===0?'draw-start':''} ${pi===people.length-1?'draw-end':''}`;
+        rows.push(`<div class="${cls}" style="--draw-shade:${shade}"><div class="history-mode">#${recentNo}</div><div class="history-names">${esc(p.name)}</div>${action}</div>`);
+      }
+    }
+    box.innerHTML=rows.length?rows.join(''):'<div class="history-empty">No draw history yet.</div>';
+  }
+  function returnHistoryPerson(historyIndex,personIndex){
+    const cl=current();if(!cl)return;
+    const h=(cl.history||[])[historyIndex],p=h?.people?.[personIndex];
+    if(!h||h.mode!=='delete'||!p||p.returned)return;
+    cl.deleteExcluded=(cl.deleteExcluded||[]).filter(id=>Number(id)!==Number(p._order));
+    p.returned=true;
+    saveLocal();render();toast(`${p.name} returned to the draw`);
+  }
+  function resetDeletePool(){
+    const cl=current();if(!cl)return;
+    cl.deleteExcluded=[];
+    (cl.history||[]).forEach(h=>{if(h.mode==='delete')(h.people||[]).forEach(p=>p.returned=true)});
+    latest=[];saveLocal();render();toast('Everyone returned to Draw & Delete');
+  }
+
+  function addClass(){const suggested=`Class ${classes.length+1}`;const name=prompt('Class name:',suggested);if(name===null)return;const finalName=name.trim()||suggested;classes.push({name:finalName,students:[],history:[],deleteExcluded:[]});active=classes.length-1;latest=[];saveLocal();render();toast(`${finalName} added`)}
+  function deleteClass(){const cl=current();if(!cl)return;if(!confirm(`Delete ${cl.name} and all its students?`))return;classes.splice(active,1);active=-1;latest=[];saveLocal();render();toast('Class deleted')}
+  function importNames(replace){const cl=current();if(!cl)return;const names=$('#importNames').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);if(!names.length)return toast('Paste at least one student name');if(replace&&cl.students.length&&!confirm(`Replace all students in ${cl.name}?`))return;if(replace){cl.students=[];cl.deleteExcluded=[];}names.forEach(name=>cl.students.push({name,randomWeight:1,deleteWeight:1,_order:globalOrder++}));sortCurrent();$('#importNames').value='';latest=[];saveLocal();render();toast(`${names.length} student${names.length===1?'':'s'} imported`)}
+  function resetWeights(field){const cl=current();if(!cl)return;cl.students.forEach(s=>s[field]=1);saveLocal();renderStudentList();toast(field==='randomWeight'?'Random weights reset to 1':'Delete weights reset to 1')}
+
+  function weightedPick(list,field){const total=list.reduce((sum,s)=>sum+normaliseWeight(s[field]),0);let x=Math.random()*total;return list.find(s=>(x-=normaliseWeight(s[field]))<=0)||list[list.length-1]}
+  function shuffle(list){const a=[...list];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+  function recordHistory(chosen){const cl=current();if(!cl)return;cl.history=Array.isArray(cl.history)?cl.history:[];if(mode==='delete'){const ids=new Set(chosen.map(s=>Number(s._order)));cl.history.forEach(h=>{if(h.mode==='delete')(h.people||[]).forEach(p=>{if(ids.has(Number(p._order)))p.returned=true})})}cl.history.push({mode,people:chosen.map(s=>({name:s.name,randomWeight:normaliseWeight(s.randomWeight),deleteWeight:normaliseWeight(s.deleteWeight),_order:s._order,returned:false})),time:Date.now()});const modeIndexes=cl.history.map((h,i)=>h.mode===mode?i:-1).filter(i=>i>=0);while(modeIndexes.length>40){cl.history.splice(modeIndexes.shift(),1);for(let i=0;i<modeIndexes.length;i++)modeIndexes[i]--}}
+  function startDraw(){
+    const cl=current(),available=modePool(cl);if(!cl||!available.length||running)return;
+    const num=Math.min(Math.max(1,drawCount),available.length),pool=[...available],order=shuffle(pool),screen=$('#lotteryScreen'),ticket=$('#ticket');
+    latest=[];running=true;$('#drawBtn').disabled=true;screen.classList.add('running');let i=0;ticket.textContent=order[i++].name;
+    const tick=Math.max(10,Math.floor(300/Math.max(order.length,1)));const interval=setInterval(()=>{if(i>=order.length){clearInterval(interval);return}ticket.textContent=order[i++].name},tick);
+    setTimeout(()=>{
+      clearInterval(interval);screen.classList.remove('running');const weightField=mode==='delete'?'deleteWeight':'randomWeight';
+      for(let n=0;n<num;n++){const chosen=weightedPick(pool,weightField);latest.push(chosen);pool.splice(pool.indexOf(chosen),1)}
+      recordHistory(latest);
+      if(mode==='delete'){cl.deleteExcluded=Array.from(new Set([...(cl.deleteExcluded||[]),...latest.map(s=>Number(s._order))]))}
+      showResults(latest);screen.classList.add('reveal');setTimeout(()=>screen.classList.remove('reveal'),260);running=false;saveLocal();render();
+    },430);
+  }
+
+  let xlsxPromise=null;
+  function ensureXLSX(){if(typeof XLSX!=='undefined')return Promise.resolve(XLSX);if(xlsxPromise)return xlsxPromise;xlsxPromise=new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';s.async=true;s.onload=()=>typeof XLSX!=='undefined'?resolve(XLSX):reject(new Error('Excel library could not start.'));s.onerror=()=>reject(new Error('Could not load Excel support. Check the internet connection.'));document.head.appendChild(s)}).catch(e=>{xlsxPromise=null;throw e});return xlsxPromise}
+  function clean(v){return String(v??'').trim().toLowerCase().replace(/[\s_-]+/g,'')}
+  function col(headers,aliases){const h=headers.map(clean);return h.findIndex(x=>aliases.includes(x))}
+  function rows(ws){return XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false})}
+  function parseLong(r){
+    if(!r.length)return null;const h=r[0],cc=col(h,['class','classname','班別','班級','班级']),sc=col(h,['student','studentname','name','學生','学生','學生姓名','学生姓名']),legacyW=col(h,['weight','weighting','chance','權重','权重','比重']),rw=col(h,['randomweight','random','randomdrawweight']),dw=col(h,['deleteweight','drawdeleteweight','drawanddeleteweight','delete']);
+    if(cc<0||sc<0)return null;const map=new Map();r.slice(1).forEach(row=>{const cn=String(row[cc]??'').trim(),sn=String(row[sc]??'').trim();if(!cn||!sn)return;if(!map.has(cn))map.set(cn,[]);const fallback=legacyW>=0?normaliseWeight(row[legacyW]):1;map.get(cn).push({name:sn,randomWeight:rw>=0?normaliseWeight(row[rw]):fallback,deleteWeight:dw>=0?normaliseWeight(row[dw]):fallback,_order:globalOrder++})});
+    return [...map.entries()].map(([name,students])=>({name,students:sortStudents(students),history:[],deleteExcluded:[]}));
+  }
+  function parseClassSheet(name,r){
+    if(!r.length)return null;const h=r[0];let sc=col(h,['student','studentname','name','學生','学生','學生姓名','学生姓名']),legacyW=col(h,['weight','weighting','chance','權重','权重','比重']),rw=col(h,['randomweight','random','randomdrawweight']),dw=col(h,['deleteweight','drawdeleteweight','drawanddeleteweight','delete']),start=1;
+    if(sc<0){sc=0;legacyW=1;start=0}const students=[];r.slice(start).forEach(row=>{const sn=String(row[sc]??'').trim();if(!sn)return;const fallback=legacyW>=0?normaliseWeight(row[legacyW]):1;students.push({name:sn,randomWeight:rw>=0?normaliseWeight(row[rw]):fallback,deleteWeight:dw>=0?normaliseWeight(row[dw]):fallback,_order:globalOrder++})});
+    return students.length?{name:String(name).trim()||'Class',students:sortStudents(students),history:[],deleteExcluded:[]}:null;
+  }
+  function parseWorkbook(wb){const preferred=wb.SheetNames.find(n=>['students','allstudents','data'].includes(clean(n)));if(preferred){const p=parseLong(rows(wb.Sheets[preferred]));if(p?.length)return p}for(const name of wb.SheetNames){const p=parseLong(rows(wb.Sheets[name]));if(p?.length)return p}return wb.SheetNames.map(name=>parseClassSheet(name,rows(wb.Sheets[name]))).filter(Boolean)}
+  async function importExcel(file){
+    try{toast('Opening My Lottery Panel…');await ensureXLSX();const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});const imported=parseWorkbook(wb);if(!imported.length)throw new Error('No student data found.');const total=imported.reduce((n,c)=>n+c.students.length,0);if(!confirm(`Import ${imported.length} class${imported.length===1?'':'es'} and ${total} students?\n\nThis will replace the current panel data for this session.`))return;classes=normaliseClasses(imported);classes.forEach(c=>c.students=sortStudents(c.students));globalOrder=maxExistingOrder()+1;active=-1;latest=[];saveLocal();render();$('#fileStatus').textContent=file.name;toast(`${total} students imported`)}catch(e){console.error(e);alert(`Could not import this Lottery Panel file.\n\nUse either:\n• Class | Student | Random Weight | Delete Weight\nOR\n• one sheet per class with Student | Random Weight | Delete Weight\n\nA legacy Weight column is also accepted.\n\n${e.message||e}`)}finally{$('#importExcel').value=''}
+  }
+  function safeSheetName(name,used){let n=String(name||'Class').replace(/[\\/?*\[\]:]/g,' ').trim().slice(0,31)||'Class',base=n,i=2;while(used.has(n.toLowerCase())){const s=` ${i++}`;n=base.slice(0,31-s.length)+s}used.add(n.toLowerCase());return n}
+  function safeFileName(name){return String(name).replace(/[\\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim()||'My Lottery Panel'}
+  async function exportExcel(){
+    saveLocal();if(!classes.length)return toast('No classes to export');try{toast('Preparing Excel…');await ensureXLSX()}catch(e){return alert(e.message||String(e))}
+    const wb=XLSX.utils.book_new(),all=[['Class','Student','Random Weight','Delete Weight']];wb.Props={Author:ownerName.trim()||'My Lottery Panel',Title:exportBaseName()};classes.forEach(cl=>sortStudents(cl.students).forEach(s=>all.push([cl.name,s.name,normaliseWeight(s.randomWeight),normaliseWeight(s.deleteWeight)])));
+    const allWs=XLSX.utils.aoa_to_sheet(all);allWs['!cols']=[{wch:18},{wch:30},{wch:14},{wch:14}];XLSX.utils.book_append_sheet(wb,allWs,'Students');
+    const used=new Set(['students']);classes.forEach(cl=>{const r=[['Student','Random Weight','Delete Weight'],...sortStudents(cl.students).map(s=>[s.name,normaliseWeight(s.randomWeight),normaliseWeight(s.deleteWeight)])],ws=XLSX.utils.aoa_to_sheet(r);ws['!cols']=[{wch:30},{wch:14},{wch:14}];XLSX.utils.book_append_sheet(wb,ws,safeSheetName(cl.name,used))});
+    XLSX.writeFile(wb,`${safeFileName(exportBaseName())}.xlsx`,{compression:true});toast('Excel exported');
+  }
+
+  $('#randomModeBtn').addEventListener('click',()=>setMode('random'));$('#deleteModeBtn').addEventListener('click',()=>setMode('delete'));$('#resetDeletePool').addEventListener('click',resetDeletePool);$('#studentCount').addEventListener('click',toggleAvailable);
+  $('#minusCount').addEventListener('click',()=>setDrawCount(drawCount-1));$('#plusCount').addEventListener('click',()=>setDrawCount(drawCount+1));
+  $('#drawCountInput').addEventListener('focus',e=>{try{e.target.select()}catch(_){}});$('#drawCountInput').addEventListener('input',e=>{const v=Math.floor(Number(e.target.value));if(Number.isFinite(v)&&v>=1)drawCount=v});$('#drawCountInput').addEventListener('blur',()=>setDrawCount(drawCount));$('#drawCountInput').addEventListener('keydown',e=>{if(e.key==='Enter'){setDrawCount(e.target.value);e.target.blur()}});$('#drawBtn').addEventListener('click',startDraw);
+  $('#historyBtn').addEventListener('click',()=>{const open=$('#historyBox').classList.toggle('open');$('#historyBtn').textContent=open?'History ▴':'History ▾'});$('#historyMinus').addEventListener('click',()=>setHistoryLimit(historyLimit-1));$('#historyPlus').addEventListener('click',()=>setHistoryLimit(historyLimit+1));$('#historyLimitInput').addEventListener('focus',e=>{try{e.target.select()}catch(_){}});$('#historyLimitInput').addEventListener('change',e=>setHistoryLimit(e.target.value));
+  $('#historyList').addEventListener('click',e=>{const b=e.target.closest('[data-history-index]');if(!b)return;returnHistoryPerson(Number(b.dataset.historyIndex),Number(b.dataset.personIndex))});
+  $('#classSelect').addEventListener('change',e=>{active=e.target.value===''?-1:Number(e.target.value);latest=[];$('#details').classList.remove('open');$('#moreBtn').textContent='More options';render()});$('#addClass').addEventListener('click',addClass);$('#deleteClass').addEventListener('click',deleteClass);$('#moreBtn').addEventListener('click',()=>{if(!current())return;const open=$('#details').classList.toggle('open');$('#moreBtn').textContent=open?'Hide options':'More options'});
+  $('#addNames').addEventListener('click',()=>importNames(false));$('#replaceNames').addEventListener('click',()=>importNames(true));$('#resetRandom').addEventListener('click',()=>resetWeights('randomWeight'));$('#resetDelete').addEventListener('click',()=>resetWeights('deleteWeight'));
+  $('#studentList').addEventListener('change',e=>{const input=e.target.closest('input[data-index]');if(!input||!current())return;const i=Number(input.dataset.index),field=input.dataset.field,s=current().students[i];if(!s)return;if(field==='randomWeight'||field==='deleteWeight')s[field]=normaliseWeight(input.value);else{s.name=input.value.trim();if(!s.name){current().students.splice(i,1)}sortCurrent()}saveLocal();latest=[];render()});
+  $('#studentList').addEventListener('click',e=>{const b=e.target.closest('[data-remove]');if(!b||!current())return;const cl=current(),removed=cl.students[Number(b.dataset.remove)];if(removed)cl.deleteExcluded=(cl.deleteExcluded||[]).filter(id=>Number(id)!==Number(removed._order));cl.students.splice(Number(b.dataset.remove),1);latest=[];saveLocal();render()});$('#importExcel').addEventListener('change',e=>{const f=e.target.files?.[0];if(f)importExcel(f)});
+  $('#ownerName').value=ownerName;$('#ownerName').addEventListener('input',e=>{ownerName=e.target.value;updateExportLabel()});$('#saveExport').addEventListener('click',exportExcel);
+
+  trimHistoriesToForty();setMode('random');setHistoryLimit(historyLimit);render();
+})();
+</script>
+</body>
+</html>
