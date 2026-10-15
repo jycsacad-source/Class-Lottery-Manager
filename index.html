@@ -162,7 +162,7 @@ input,textarea,select{font-size:16px}
   <section class="card save-card">
     <div class="name-row"><label for="ownerName">Your name</label><input id="ownerName" type="text" autocomplete="name" placeholder="Jose Yu"></div>
     <button id="saveExport" class="btn primary save-export" type="button">Export Excel as &quot;My Lottery Panel DDMMYY&quot;</button>
-    <div class="save-note">Nothing is loaded automatically. Import your Lottery Panel to begin, then export the current session to Excel.</div>
+    <div class="save-note">Your panel is saved automatically on this device. Excel export can still be used as a backup.</div>
   </section>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -170,6 +170,8 @@ input,textarea,select{font-size:16px}
 <script>
 (()=>{
   const $=s=>document.querySelector(s);
+  const STORAGE_KEY='classLotteryPanel_v1';
+
   let classes=[];
   let active=-1;
   let drawCount=1;
@@ -179,7 +181,7 @@ input,textarea,select{font-size:16px}
   let historyLimit=10;
   let ownerName='';
   let toastTimer;
-  let globalOrder=maxExistingOrder()+1;
+  let globalOrder=0;
 
   function normaliseWeight(v){const n=Number(v);return Number.isFinite(n)&&n>0?Math.max(.1,n):1}
   function normaliseClasses(data){
@@ -188,24 +190,62 @@ input,textarea,select{font-size:16px}
     return data.map((cl,i)=>({
       name:String(cl?.name||`Class ${i+1}`).trim()||`Class ${i+1}`,
       students:Array.isArray(cl?.students)?cl.students.map(s=>{
-        const legacy=normaliseWeight(s?.weight);
         return {name:String(s?.name??'').trim(),randomWeight:normaliseWeight(s?.randomWeight??s?.weight??1),deleteWeight:normaliseWeight(s?.deleteWeight??s?.weight??1),_order:Number.isFinite(Number(s?._order))?Number(s._order):seq++};
       }).filter(s=>s.name):[],
-      history:Array.isArray(cl?.history)?cl.history.slice(-40).map(h=>{
-        const mode=h?.mode==='delete'?'delete':'random';
+      history:Array.isArray(cl?.history)?cl.history.slice(-80).map(h=>{
+        const historyMode=h?.mode==='delete'?'delete':'random';
         const legacyNames=Array.isArray(h?.names)?h.names.map(String):[];
         const people=Array.isArray(h?.people)?h.people.map((p,pi)=>({
           name:String(p?.name??legacyNames[pi]??''),randomWeight:normaliseWeight(p?.randomWeight??1),deleteWeight:normaliseWeight(p?.deleteWeight??1),_order:Number.isFinite(Number(p?._order))?Number(p._order):seq++,returned:!!p?.returned
         })).filter(p=>p.name):legacyNames.map(name=>({name,randomWeight:1,deleteWeight:1,_order:seq++,returned:false}));
-        return {mode,people,time:Number(h?.time)||Date.now()};
+        return {mode:historyMode,people,time:Number(h?.time)||Date.now()};
       }):[],
       deleteExcluded:Array.isArray(cl?.deleteExcluded)?cl.deleteExcluded.map(Number).filter(Number.isFinite):[]
     }));
   }
+
   function maxExistingOrder(){let max=-1;classes.forEach(c=>c.students.forEach(s=>{if(Number.isFinite(Number(s._order)))max=Math.max(max,Number(s._order))}));return max}
   function esc(v){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
   function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2000)}
-  function saveLocal(){/* Session-only by design: Excel import/export is the source of truth. */}
+
+  function saveLocal(){
+    try{
+      const data={
+        version:1,
+        classes,
+        active,
+        drawCount,
+        mode,
+        historyLimit,
+        ownerName,
+        savedAt:Date.now()
+      };
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+    }catch(e){
+      console.error('Could not save Class Lottery Panel locally:',e);
+    }
+  }
+
+  function loadLocal(){
+    try{
+      const raw=localStorage.getItem(STORAGE_KEY);
+      if(!raw)return false;
+      const data=JSON.parse(raw);
+      classes=normaliseClasses(data?.classes);
+      active=Number.isInteger(Number(data?.active))?Number(data.active):-1;
+      if(active<0||active>=classes.length)active=classes.length?0:-1;
+      drawCount=Math.max(1,Math.floor(Number(data?.drawCount)||1));
+      mode=data?.mode==='delete'?'delete':'random';
+      historyLimit=Math.min(40,Math.max(1,Math.floor(Number(data?.historyLimit)||10));
+      ownerName=String(data?.ownerName??'');
+      globalOrder=maxExistingOrder()+1;
+      return true;
+    }catch(e){
+      console.error('Could not restore saved Class Lottery Panel:',e);
+      return false;
+    }
+  }
+
   function current(){return active>=0&&classes[active]?classes[active]:null}
   function deletePool(cl=current()){if(!cl)return [];const excluded=new Set((cl.deleteExcluded||[]).map(Number));return cl.students.filter(s=>!excluded.has(Number(s._order)))}
   function modePool(cl=current()){if(!cl)return [];return mode==='delete'?deletePool(cl):cl.students}
@@ -219,10 +259,10 @@ input,textarea,select{font-size:16px}
   function setTicketState(text){const ticket=$('#ticket');ticket.style.removeProperty('--result-font');ticket.innerHTML='';ticket.textContent=text}
   function resultFontSize(count,longest){let size=count<=1?34:count===2?30:count===3?27:count<=5?23:count<=8?19:count<=12?16:14;if(longest>24)size-=5;else if(longest>18)size-=3;else if(longest>14)size-=1;return Math.max(12,size)}
   function showResults(students){const ticket=$('#ticket');if(!students.length){setTicketState('Ready');return}const longest=Math.max(...students.map(s=>String(s.name).length));const cols=students.length>10?'three-col':students.length>5?'two-col':'';const size=resultFontSize(students.length,longest);ticket.innerHTML=`<div class="result-grid ${cols}" style="--result-font:${size}px">${students.map(s=>`<div class="result-name">${esc(s.name)}</div>`).join('')}</div>`}
-  function setDrawCount(value){const n=Math.max(1,Math.floor(Number(value)||1));drawCount=n;$('#drawCountInput').value=String(n)}
-  function setHistoryLimit(v){historyLimit=Math.min(40,Math.max(1,Math.floor(Number(v)||1)));$('#historyLimitInput').value=String(historyLimit);renderHistory()}
+  function setDrawCount(value){const n=Math.max(1,Math.floor(Number(value)||1));drawCount=n;$('#drawCountInput').value=String(n);saveLocal()}
+  function setHistoryLimit(v){historyLimit=Math.min(40,Math.max(1,Math.floor(Number(v)||1)));$('#historyLimitInput').value=String(historyLimit);saveLocal();renderHistory()}
   function trimHistoriesToForty(){classes.forEach(c=>{if(!Array.isArray(c.history))return;['random','delete'].forEach(m=>{const idx=c.history.map((h,i)=>h.mode===m?i:-1).filter(i=>i>=0);while(idx.length>40){c.history.splice(idx.shift(),1);for(let j=0;j<idx.length;j++)idx[j]--}})});saveLocal()}
-  function setMode(next){if(running)return;closeAvailable();mode=next==='delete'?'delete':'random';latest=[];$('#lotteryFrame').classList.toggle('mode-random',mode==='random');$('#lotteryFrame').classList.toggle('mode-delete',mode==='delete');$('#randomModeBtn').classList.toggle('active',mode==='random');$('#deleteModeBtn').classList.toggle('active',mode==='delete');render()}
+  function setMode(next){if(running)return;closeAvailable();mode=next==='delete'?'delete':'random';latest=[];$('#lotteryFrame').classList.toggle('mode-random',mode==='random');$('#lotteryFrame').classList.toggle('mode-delete',mode==='delete');$('#randomModeBtn').classList.toggle('active',mode==='random');$('#deleteModeBtn').classList.toggle('active',mode==='delete');saveLocal();render()}
 
   function renderAvailableList(){
     const cl=current(),box=$('#availableList');if(!box)return;
@@ -245,10 +285,12 @@ input,textarea,select{font-size:16px}
     if(!cl){setTicketState('Select a class');$('#details').classList.remove('open');$('#moreBtn').textContent='More options'}else if(!running){if(latest.length)showResults(latest);else setTicketState(pool.length?'Ready':(mode==='delete'?'Pool empty — reset to return everyone':'Add students first'))}
     renderStudentList();renderHistory();renderAvailableList();$('#drawCountInput').value=String(drawCount);$('#historyLimitInput').value=String(historyLimit);updateExportLabel();
   }
+
   function renderStudentList(){
     const cl=current();if(!cl){$('#studentList').innerHTML='';return}
     $('#studentList').innerHTML=cl.students.length?cl.students.map((s,i)=>`<div class="student-row"><input data-index="${i}" data-field="name" value="${esc(s.name)}" aria-label="Student name"><input data-index="${i}" data-field="randomWeight" type="number" min="0.1" step="0.1" inputmode="decimal" value="${s.randomWeight}" aria-label="Random draw weight"><input data-index="${i}" data-field="deleteWeight" type="number" min="0.1" step="0.1" inputmode="decimal" value="${s.deleteWeight}" aria-label="Draw and delete weight"><button class="remove-student" data-remove="${i}" type="button" aria-label="Remove student">×</button></div>`).join(''):'<div class="empty">No students in this class.</div>';
   }
+
   function renderHistory(){
     const cl=current();const box=$('#historyList');
     if(!cl){box.innerHTML='<div class="history-empty">Select a class to see history.</div>';return}
@@ -258,7 +300,7 @@ input,textarea,select{font-size:16px}
     const randomShades=['rgba(255,255,255,.30)','rgba(0,0,0,.22)','rgba(255,180,214,.34)','rgba(84,0,38,.34)','rgba(255,255,255,.16)','rgba(0,0,0,.34)','rgba(255,204,228,.40)','rgba(110,0,52,.24)','rgba(255,255,255,.38)','rgba(0,0,0,.14)'];
     const deleteShades=['rgba(255,255,255,.30)','rgba(0,0,0,.22)','rgba(255,232,150,.36)','rgba(86,61,0,.34)','rgba(255,255,255,.16)','rgba(0,0,0,.34)','rgba(255,242,184,.42)','rgba(112,79,0,.25)','rgba(255,255,255,.38)','rgba(0,0,0,.14)'];
     const shades=mode==='delete'?deleteShades:randomShades;
-    for(let ei=events.length-1, recentNo=1;ei>=0;ei--,recentNo++){
+    for(let ei=events.length-1,recentNo=1;ei>=0;ei--,recentNo++){
       const {h,index:absoluteIndex}=events[ei],people=Array.isArray(h.people)?h.people:[];
       const shade=shades[(recentNo-1)%shades.length];
       for(let pi=0;pi<people.length;pi++){
@@ -270,6 +312,7 @@ input,textarea,select{font-size:16px}
     }
     box.innerHTML=rows.length?rows.join(''):'<div class="history-empty">No draw history yet.</div>';
   }
+
   function returnHistoryPerson(historyIndex,personIndex){
     const cl=current();if(!cl)return;
     const h=(cl.history||[])[historyIndex],p=h?.people?.[personIndex];
@@ -278,6 +321,7 @@ input,textarea,select{font-size:16px}
     p.returned=true;
     saveLocal();render();toast(`${p.name} returned to the draw`);
   }
+
   function resetDeletePool(){
     const cl=current();if(!cl)return;
     cl.deleteExcluded=[];
@@ -286,7 +330,7 @@ input,textarea,select{font-size:16px}
   }
 
   function addClass(){const suggested=`Class ${classes.length+1}`;const name=prompt('Class name:',suggested);if(name===null)return;const finalName=name.trim()||suggested;classes.push({name:finalName,students:[],history:[],deleteExcluded:[]});active=classes.length-1;latest=[];saveLocal();render();toast(`${finalName} added`)}
-  function deleteClass(){const cl=current();if(!cl)return;if(!confirm(`Delete ${cl.name} and all its students?`))return;classes.splice(active,1);active=-1;latest=[];saveLocal();render();toast('Class deleted')}
+  function deleteClass(){const cl=current();if(!cl)return;if(!confirm(`Delete ${cl.name} and all its students?`))return;classes.splice(active,1);active=classes.length?Math.min(active,classes.length-1):-1;latest=[];saveLocal();render();toast('Class deleted')}
   function importNames(replace){const cl=current();if(!cl)return;const names=$('#importNames').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);if(!names.length)return toast('Paste at least one student name');if(replace&&cl.students.length&&!confirm(`Replace all students in ${cl.name}?`))return;if(replace){cl.students=[];cl.deleteExcluded=[];}names.forEach(name=>cl.students.push({name,randomWeight:1,deleteWeight:1,_order:globalOrder++}));sortCurrent();$('#importNames').value='';latest=[];saveLocal();render();toast(`${names.length} student${names.length===1?'':'s'} imported`)}
   function resetWeights(field){const cl=current();if(!cl)return;cl.students.forEach(s=>s[field]=1);saveLocal();renderStudentList();toast(field==='randomWeight'?'Random weights reset to 1':'Delete weights reset to 1')}
 
@@ -324,30 +368,135 @@ input,textarea,select{font-size:16px}
   }
   function parseWorkbook(wb){const preferred=wb.SheetNames.find(n=>['students','allstudents','data'].includes(clean(n)));if(preferred){const p=parseLong(rows(wb.Sheets[preferred]));if(p?.length)return p}for(const name of wb.SheetNames){const p=parseLong(rows(wb.Sheets[name]));if(p?.length)return p}return wb.SheetNames.map(name=>parseClassSheet(name,rows(wb.Sheets[name]))).filter(Boolean)}
   async function importExcel(file){
-    try{toast('Opening My Lottery Panel…');await ensureXLSX();const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});const imported=parseWorkbook(wb);if(!imported.length)throw new Error('No student data found.');const total=imported.reduce((n,c)=>n+c.students.length,0);if(!confirm(`Import ${imported.length} class${imported.length===1?'':'es'} and ${total} students?\n\nThis will replace the current panel data for this session.`))return;classes=normaliseClasses(imported);classes.forEach(c=>c.students=sortStudents(c.students));globalOrder=maxExistingOrder()+1;active=-1;latest=[];saveLocal();render();$('#fileStatus').textContent=file.name;toast(`${total} students imported`)}catch(e){console.error(e);alert(`Could not import this Lottery Panel file.\n\nUse either:\n• Class | Student | Random Weight | Delete Weight\nOR\n• one sheet per class with Student | Random Weight | Delete Weight\n\nA legacy Weight column is also accepted.\n\n${e.message||e}`)}finally{$('#importExcel').value=''}
+    try{
+      toast('Opening My Lottery Panel…');
+      await ensureXLSX();
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array'});
+      const imported=parseWorkbook(wb);
+      if(!imported.length)throw new Error('No student data found.');
+      const total=imported.reduce((n,c)=>n+c.students.length,0);
+      if(!confirm(`Import ${imported.length} class${imported.length===1?'':'es'} and ${total} students?\n\nThis will replace the currently saved panel data on this device.`))return;
+      classes=normaliseClasses(imported);
+      classes.forEach(c=>c.students=sortStudents(c.students));
+      globalOrder=maxExistingOrder()+1;
+      active=classes.length?0:-1;
+      latest=[];
+      saveLocal();
+      render();
+      $('#fileStatus').textContent=file.name;
+      toast(`${total} students imported and saved`);
+    }catch(e){
+      console.error(e);
+      alert(`Could not import this Lottery Panel file.\n\nUse either:\n• Class | Student | Random Weight | Delete Weight\nOR\n• one sheet per class with Student | Random Weight | Delete Weight\n\nA legacy Weight column is also accepted.\n\n${e.message||e}`);
+    }finally{
+      $('#importExcel').value='';
+    }
   }
+
   function safeSheetName(name,used){let n=String(name||'Class').replace(/[\\/?*\[\]:]/g,' ').trim().slice(0,31)||'Class',base=n,i=2;while(used.has(n.toLowerCase())){const s=` ${i++}`;n=base.slice(0,31-s.length)+s}used.add(n.toLowerCase());return n}
   function safeFileName(name){return String(name).replace(/[\\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim()||'My Lottery Panel'}
   async function exportExcel(){
-    saveLocal();if(!classes.length)return toast('No classes to export');try{toast('Preparing Excel…');await ensureXLSX()}catch(e){return alert(e.message||String(e))}
-    const wb=XLSX.utils.book_new(),all=[['Class','Student','Random Weight','Delete Weight']];wb.Props={Author:ownerName.trim()||'My Lottery Panel',Title:exportBaseName()};classes.forEach(cl=>sortStudents(cl.students).forEach(s=>all.push([cl.name,s.name,normaliseWeight(s.randomWeight),normaliseWeight(s.deleteWeight)])));
+    saveLocal();if(!classes.length)return toast('No classes to export');
+    try{toast('Preparing Excel…');await ensureXLSX()}catch(e){return alert(e.message||String(e))}
+    const wb=XLSX.utils.book_new(),all=[['Class','Student','Random Weight','Delete Weight']];
+    wb.Props={Author:ownerName.trim()||'My Lottery Panel',Title:exportBaseName()};
+    classes.forEach(cl=>sortStudents(cl.students).forEach(s=>all.push([cl.name,s.name,normaliseWeight(s.randomWeight),normaliseWeight(s.deleteWeight)])));
     const allWs=XLSX.utils.aoa_to_sheet(all);allWs['!cols']=[{wch:18},{wch:30},{wch:14},{wch:14}];XLSX.utils.book_append_sheet(wb,allWs,'Students');
-    const used=new Set(['students']);classes.forEach(cl=>{const r=[['Student','Random Weight','Delete Weight'],...sortStudents(cl.students).map(s=>[s.name,normaliseWeight(s.randomWeight),normaliseWeight(s.deleteWeight)])],ws=XLSX.utils.aoa_to_sheet(r);ws['!cols']=[{wch:30},{wch:14},{wch:14}];XLSX.utils.book_append_sheet(wb,ws,safeSheetName(cl.name,used))});
-    XLSX.writeFile(wb,`${safeFileName(exportBaseName())}.xlsx`,{compression:true});toast('Excel exported');
+    const used=new Set(['students']);
+    classes.forEach(cl=>{
+      const r=[['Student','Random Weight','Delete Weight'],...sortStudents(cl.students).map(s=>[s.name,normaliseWeight(s.randomWeight),normaliseWeight(s.deleteWeight)])],
+      ws=XLSX.utils.aoa_to_sheet(r);
+      ws['!cols']=[{wch:30},{wch:14},{wch:14}];
+      XLSX.utils.book_append_sheet(wb,ws,safeSheetName(cl.name,used))
+    });
+    XLSX.writeFile(wb,`${safeFileName(exportBaseName())}.xlsx`,{compression:true});
+    toast('Excel exported');
   }
 
-  $('#randomModeBtn').addEventListener('click',()=>setMode('random'));$('#deleteModeBtn').addEventListener('click',()=>setMode('delete'));$('#resetDeletePool').addEventListener('click',resetDeletePool);$('#studentCount').addEventListener('click',toggleAvailable);
-  $('#minusCount').addEventListener('click',()=>setDrawCount(drawCount-1));$('#plusCount').addEventListener('click',()=>setDrawCount(drawCount+1));
-  $('#drawCountInput').addEventListener('focus',e=>{try{e.target.select()}catch(_){}});$('#drawCountInput').addEventListener('input',e=>{const v=Math.floor(Number(e.target.value));if(Number.isFinite(v)&&v>=1)drawCount=v});$('#drawCountInput').addEventListener('blur',()=>setDrawCount(drawCount));$('#drawCountInput').addEventListener('keydown',e=>{if(e.key==='Enter'){setDrawCount(e.target.value);e.target.blur()}});$('#drawBtn').addEventListener('click',startDraw);
-  $('#historyBtn').addEventListener('click',()=>{const open=$('#historyBox').classList.toggle('open');$('#historyBtn').textContent=open?'History ▴':'History ▾'});$('#historyMinus').addEventListener('click',()=>setHistoryLimit(historyLimit-1));$('#historyPlus').addEventListener('click',()=>setHistoryLimit(historyLimit+1));$('#historyLimitInput').addEventListener('focus',e=>{try{e.target.select()}catch(_){}});$('#historyLimitInput').addEventListener('change',e=>setHistoryLimit(e.target.value));
-  $('#historyList').addEventListener('click',e=>{const b=e.target.closest('[data-history-index]');if(!b)return;returnHistoryPerson(Number(b.dataset.historyIndex),Number(b.dataset.personIndex))});
-  $('#classSelect').addEventListener('change',e=>{active=e.target.value===''?-1:Number(e.target.value);latest=[];$('#details').classList.remove('open');$('#moreBtn').textContent='More options';render()});$('#addClass').addEventListener('click',addClass);$('#deleteClass').addEventListener('click',deleteClass);$('#moreBtn').addEventListener('click',()=>{if(!current())return;const open=$('#details').classList.toggle('open');$('#moreBtn').textContent=open?'Hide options':'More options'});
-  $('#addNames').addEventListener('click',()=>importNames(false));$('#replaceNames').addEventListener('click',()=>importNames(true));$('#resetRandom').addEventListener('click',()=>resetWeights('randomWeight'));$('#resetDelete').addEventListener('click',()=>resetWeights('deleteWeight'));
-  $('#studentList').addEventListener('change',e=>{const input=e.target.closest('input[data-index]');if(!input||!current())return;const i=Number(input.dataset.index),field=input.dataset.field,s=current().students[i];if(!s)return;if(field==='randomWeight'||field==='deleteWeight')s[field]=normaliseWeight(input.value);else{s.name=input.value.trim();if(!s.name){current().students.splice(i,1)}sortCurrent()}saveLocal();latest=[];render()});
-  $('#studentList').addEventListener('click',e=>{const b=e.target.closest('[data-remove]');if(!b||!current())return;const cl=current(),removed=cl.students[Number(b.dataset.remove)];if(removed)cl.deleteExcluded=(cl.deleteExcluded||[]).filter(id=>Number(id)!==Number(removed._order));cl.students.splice(Number(b.dataset.remove),1);latest=[];saveLocal();render()});$('#importExcel').addEventListener('change',e=>{const f=e.target.files?.[0];if(f)importExcel(f)});
-  $('#ownerName').value=ownerName;$('#ownerName').addEventListener('input',e=>{ownerName=e.target.value;updateExportLabel()});$('#saveExport').addEventListener('click',exportExcel);
+  $('#randomModeBtn').addEventListener('click',()=>setMode('random'));
+  $('#deleteModeBtn').addEventListener('click',()=>setMode('delete'));
+  $('#resetDeletePool').addEventListener('click',resetDeletePool);
+  $('#studentCount').addEventListener('click',toggleAvailable);
 
-  trimHistoriesToForty();setMode('random');setHistoryLimit(historyLimit);render();
+  $('#minusCount').addEventListener('click',()=>setDrawCount(drawCount-1));
+  $('#plusCount').addEventListener('click',()=>setDrawCount(drawCount+1));
+  $('#drawCountInput').addEventListener('focus',e=>{try{e.target.select()}catch(_){}});
+  $('#drawCountInput').addEventListener('input',e=>{const v=Math.floor(Number(e.target.value));if(Number.isFinite(v)&&v>=1){drawCount=v;saveLocal()}});
+  $('#drawCountInput').addEventListener('blur',()=>setDrawCount(drawCount));
+  $('#drawCountInput').addEventListener('keydown',e=>{if(e.key==='Enter'){setDrawCount(e.target.value);e.target.blur()}});
+  $('#drawBtn').addEventListener('click',startDraw);
+
+  $('#historyBtn').addEventListener('click',()=>{const open=$('#historyBox').classList.toggle('open');$('#historyBtn').textContent=open?'History ▴':'History ▾'});
+  $('#historyMinus').addEventListener('click',()=>setHistoryLimit(historyLimit-1));
+  $('#historyPlus').addEventListener('click',()=>setHistoryLimit(historyLimit+1));
+  $('#historyLimitInput').addEventListener('focus',e=>{try{e.target.select()}catch(_){}});
+  $('#historyLimitInput').addEventListener('change',e=>setHistoryLimit(e.target.value));
+  $('#historyList').addEventListener('click',e=>{const b=e.target.closest('[data-history-index]');if(!b)return;returnHistoryPerson(Number(b.dataset.historyIndex),Number(b.dataset.personIndex))});
+
+  $('#classSelect').addEventListener('change',e=>{
+    active=e.target.value===''?-1:Number(e.target.value);
+    latest=[];
+    $('#details').classList.remove('open');
+    $('#moreBtn').textContent='More options';
+    saveLocal();
+    render();
+  });
+
+  $('#addClass').addEventListener('click',addClass);
+  $('#deleteClass').addEventListener('click',deleteClass);
+  $('#moreBtn').addEventListener('click',()=>{if(!current())return;const open=$('#details').classList.toggle('open');$('#moreBtn').textContent=open?'Hide options':'More options'});
+
+  $('#addNames').addEventListener('click',()=>importNames(false));
+  $('#replaceNames').addEventListener('click',()=>importNames(true));
+  $('#resetRandom').addEventListener('click',()=>resetWeights('randomWeight'));
+  $('#resetDelete').addEventListener('click',()=>resetWeights('deleteWeight'));
+
+  $('#studentList').addEventListener('change',e=>{
+    const input=e.target.closest('input[data-index]');
+    if(!input||!current())return;
+    const i=Number(input.dataset.index),field=input.dataset.field,s=current().students[i];
+    if(!s)return;
+    if(field==='randomWeight'||field==='deleteWeight')s[field]=normaliseWeight(input.value);
+    else{
+      s.name=input.value.trim();
+      if(!s.name){current().students.splice(i,1)}
+      sortCurrent()
+    }
+    saveLocal();latest=[];render();
+  });
+
+  $('#studentList').addEventListener('click',e=>{
+    const b=e.target.closest('[data-remove]');
+    if(!b||!current())return;
+    const cl=current(),removed=cl.students[Number(b.dataset.remove)];
+    if(removed)cl.deleteExcluded=(cl.deleteExcluded||[]).filter(id=>Number(id)!==Number(removed._order));
+    cl.students.splice(Number(b.dataset.remove),1);
+    latest=[];
+    saveLocal();
+    render();
+  });
+
+  $('#importExcel').addEventListener('change',e=>{const f=e.target.files?.[0];if(f)importExcel(f)});
+  $('#ownerName').addEventListener('input',e=>{ownerName=e.target.value;saveLocal();updateExportLabel()});
+  $('#saveExport').addEventListener('click',exportExcel);
+
+  const restored=loadLocal();
+
+  $('#ownerName').value=ownerName;
+  $('#lotteryFrame').classList.toggle('mode-random',mode==='random');
+  $('#lotteryFrame').classList.toggle('mode-delete',mode==='delete');
+  $('#randomModeBtn').classList.toggle('active',mode==='random');
+  $('#deleteModeBtn').classList.toggle('active',mode==='delete');
+
+  trimHistoriesToForty();
+  setHistoryLimit(historyLimit);
+  render();
+
+  if(restored&&classes.length){
+    $('#fileStatus').textContent='Restored from this device';
+    setTimeout(()=>toast('Saved panel restored'),250);
+  }
 })();
 </script>
 </body>
