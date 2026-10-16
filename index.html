@@ -246,7 +246,7 @@ input,textarea,select{font-size:16px}
       if(active<0||active>=classes.length)active=classes.length?0:-1;
       drawCount=Math.max(1,Math.floor(Number(data?.drawCount)||1));
       mode=data?.mode==='delete'?'delete':'random';
-      historyLimit=Math.min(40,Math.max(1,Math.floor(Number(data?.historyLimit)||10));
+      historyLimit=Math.min(40,Math.max(1,Math.floor(Number(data?.historyLimit)||10)));
       ownerName=String(data?.ownerName??'');
       globalOrder=maxExistingOrder()+1;
       return true;
@@ -510,6 +510,6 @@ input,textarea,select{font-size:16px}
 })();
 </script>
 
-<div class="version-footer">ver 1.0</div>
+<div class="version-footer">ver 1.1</div>
 </body>
 </html>
