@@ -173,6 +173,7 @@ input,textarea,select{font-size:16px}
     <div class="name-row"><label for="ownerName">Your name</label><input id="ownerName" type="text" autocomplete="name" placeholder="Jose Yu"></div>
     <button id="saveExport" class="btn primary save-export" type="button">Export Excel as &quot;My Lottery Panel DDMMYY&quot;</button>
     <div class="save-note">Your panel is saved automatically on this device. Excel export can still be used as a backup.</div>
+    <div id="saveStatus" class="save-note" aria-live="polite">Checking local save…</div>
   </section>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -181,6 +182,9 @@ input,textarea,select{font-size:16px}
 (()=>{
   const $=s=>document.querySelector(s);
   const STORAGE_KEY='classLotteryPanel_v1';
+  const DB_NAME='ClassLotteryPanelDB';
+  const DB_STORE='state';
+  const DB_KEY='latest';
 
   let classes=[];
   let active=-1;
@@ -218,41 +222,137 @@ input,textarea,select{font-size:16px}
   function esc(v){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
   function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2000)}
 
-  function saveLocal(){
-    try{
-      const data={
-        version:1,
-        classes,
-        active,
-        drawCount,
-        mode,
-        historyLimit,
-        ownerName,
-        savedAt:Date.now()
+  function stateSnapshot(){
+    return {
+      version:2,
+      classes,
+      active,
+      drawCount,
+      mode,
+      historyLimit,
+      ownerName,
+      savedAt:Date.now()
+    };
+  }
+
+  function updateSaveStatus(message){
+    const el=$('#saveStatus');
+    if(el)el.textContent=message;
+  }
+
+  function openStateDB(){
+    return new Promise((resolve,reject)=>{
+      if(!('indexedDB' in window))return reject(new Error('IndexedDB unavailable'));
+      const req=indexedDB.open(DB_NAME,1);
+      req.onupgradeneeded=()=>{
+        const db=req.result;
+        if(!db.objectStoreNames.contains(DB_STORE))db.createObjectStore(DB_STORE);
       };
-      localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
-    }catch(e){
-      console.error('Could not save Class Lottery Panel locally:',e);
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error||new Error('Could not open local database'));
+    });
+  }
+
+  async function saveIndexedDB(data){
+    const db=await openStateDB();
+    try{
+      await new Promise((resolve,reject)=>{
+        const tx=db.transaction(DB_STORE,'readwrite');
+        tx.objectStore(DB_STORE).put(data,DB_KEY);
+        tx.oncomplete=()=>resolve();
+        tx.onerror=()=>reject(tx.error||new Error('Could not save local database'));
+        tx.onabort=()=>reject(tx.error||new Error('Local database save aborted'));
+      });
+    }finally{
+      db.close();
     }
   }
 
-  function loadLocal(){
+  async function loadIndexedDB(){
+    const db=await openStateDB();
+    try{
+      return await new Promise((resolve,reject)=>{
+        const tx=db.transaction(DB_STORE,'readonly');
+        const req=tx.objectStore(DB_STORE).get(DB_KEY);
+        req.onsuccess=()=>resolve(req.result||null);
+        req.onerror=()=>reject(req.error||new Error('Could not read local database'));
+      });
+    }finally{
+      db.close();
+    }
+  }
+
+  function applySavedState(data){
+    classes=normaliseClasses(data?.classes);
+    active=Number.isInteger(Number(data?.active))?Number(data.active):-1;
+    if(active<0||active>=classes.length)active=classes.length?0:-1;
+    drawCount=Math.max(1,Math.floor(Number(data?.drawCount)||1));
+    mode=data?.mode==='delete'?'delete':'random';
+    historyLimit=Math.min(40,Math.max(1,Math.floor(Number(data?.historyLimit)||10)));
+    ownerName=String(data?.ownerName??'');
+    globalOrder=maxExistingOrder()+1;
+  }
+
+  function saveLocal(){
+    const data=stateSnapshot();
+    let localOK=false;
+
+    try{
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+      localOK=true;
+    }catch(e){
+      console.warn('localStorage save failed:',e);
+    }
+
+    saveIndexedDB(data).then(()=>{
+      updateSaveStatus('Saved on this device ✓');
+    }).catch(e=>{
+      console.warn('IndexedDB save failed:',e);
+      updateSaveStatus(localOK?'Saved on this device ✓':'Auto-save unavailable — export Excel as backup');
+    });
+  }
+
+  async function loadSavedState(){
+    let data=null;
+    let source='';
+
     try{
       const raw=localStorage.getItem(STORAGE_KEY);
-      if(!raw)return false;
-      const data=JSON.parse(raw);
-      classes=normaliseClasses(data?.classes);
-      active=Number.isInteger(Number(data?.active))?Number(data.active):-1;
-      if(active<0||active>=classes.length)active=classes.length?0:-1;
-      drawCount=Math.max(1,Math.floor(Number(data?.drawCount)||1));
-      mode=data?.mode==='delete'?'delete':'random';
-      historyLimit=Math.min(40,Math.max(1,Math.floor(Number(data?.historyLimit)||10)));
-      ownerName=String(data?.ownerName??'');
-      globalOrder=maxExistingOrder()+1;
-      return true;
+      if(raw){
+        data=JSON.parse(raw);
+        source='localStorage';
+      }
     }catch(e){
-      console.error('Could not restore saved Class Lottery Panel:',e);
-      return false;
+      console.warn('localStorage restore failed:',e);
+    }
+
+    if(!data){
+      try{
+        data=await loadIndexedDB();
+        if(data)source='IndexedDB';
+      }catch(e){
+        console.warn('IndexedDB restore failed:',e);
+      }
+    }
+
+    if(!data)return {restored:false,source:''};
+
+    try{
+      applySavedState(data);
+      return {restored:true,source};
+    }catch(e){
+      console.error('Could not apply saved Class Lottery Panel:',e);
+      return {restored:false,source:''};
+    }
+  }
+
+  async function requestPersistentStorage(){
+    try{
+      if(!navigator.storage?.persist)return;
+      const already=await navigator.storage.persisted?.();
+      if(!already)await navigator.storage.persist();
+    }catch(e){
+      console.warn('Persistent storage request not available:',e);
     }
   }
 
@@ -491,25 +591,36 @@ input,textarea,select{font-size:16px}
   $('#ownerName').addEventListener('input',e=>{ownerName=e.target.value;saveLocal();updateExportLabel()});
   $('#saveExport').addEventListener('click',exportExcel);
 
-  const restored=loadLocal();
+  window.addEventListener('pagehide',saveLocal);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveLocal()});
 
-  $('#ownerName').value=ownerName;
-  $('#lotteryFrame').classList.toggle('mode-random',mode==='random');
-  $('#lotteryFrame').classList.toggle('mode-delete',mode==='delete');
-  $('#randomModeBtn').classList.toggle('active',mode==='random');
-  $('#deleteModeBtn').classList.toggle('active',mode==='delete');
+  async function initialise(){
+    await requestPersistentStorage();
+    const restored=await loadSavedState();
 
-  trimHistoriesToForty();
-  setHistoryLimit(historyLimit);
-  render();
+    $('#ownerName').value=ownerName;
+    $('#lotteryFrame').classList.toggle('mode-random',mode==='random');
+    $('#lotteryFrame').classList.toggle('mode-delete',mode==='delete');
+    $('#randomModeBtn').classList.toggle('active',mode==='random');
+    $('#deleteModeBtn').classList.toggle('active',mode==='delete');
 
-  if(restored&&classes.length){
-    $('#fileStatus').textContent='Restored from this device';
-    setTimeout(()=>toast('Saved panel restored'),250);
+    trimHistoriesToForty();
+    setHistoryLimit(historyLimit);
+    render();
+
+    if(restored.restored&&classes.length){
+      $('#fileStatus').textContent='Restored from this device';
+      updateSaveStatus('Saved on this device ✓');
+      setTimeout(()=>toast('Saved panel restored'),250);
+    }else{
+      updateSaveStatus('Nothing saved on this device yet');
+    }
   }
+
+  initialise();
 })();
 </script>
 
-<div class="version-footer">ver 1.1</div>
+<div class="version-footer">ver 1.2</div>
 </body>
 </html>
